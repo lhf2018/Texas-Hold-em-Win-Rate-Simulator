@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>德扑胜率模拟器 | AI辅助决策</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0a2a1a 0%, #031007 100%);
+            min-height: 100vh;
+            padding: 20px;
+            font-family: 'Segoe UI', system-ui, -apple-system, 'Inter', sans-serif;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .main-card {
+            background: rgba(20, 30, 18, 0.95);
+            backdrop-filter: blur(2px);
+            border-radius: 48px;
+            border: 1px solid rgba(210, 180, 80, 0.5);
+            overflow: hidden;
+            box-shadow: 0 25px 45px rgba(0, 0, 0, 0.5);
+        }
+
+        /* 头部 */
+        .header {
+            text-align: center;
+            padding: 24px 20px 16px;
+            border-bottom: 1px solid #4a5a38;
+        }
+
+        h1 {
+            font-size: 2rem;
+            background: linear-gradient(135deg, #f9e6a8, #cfae4a);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 6px;
+        }
+
+        .sub {
+            color: #bbaa70;
+            font-size: 0.75rem;
+        }
+
+        /* 模式切换 */
+        .mode-switch {
+            display: flex;
+            gap: 12px;
+            padding: 20px 24px 0;
+        }
+
+        .mode-btn {
+            flex: 1;
+            padding: 12px;
+            border-radius: 60px;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            background: #2a3720;
+            color: #cfc186;
+            border: none;
+            transition: all 0.2s;
+        }
+
+        .mode-btn.active {
+            background: #e4b73e;
+            color: #1a2a0e;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        /* 牌区 */
+        .felt {
+            background: #1b4a2e;
+            margin: 20px 24px;
+            padding: 20px;
+            border-radius: 36px;
+            box-shadow: inset 0 0 0 1px #588d64;
+        }
+
+        .section-title {
+            color: #f9eec2;
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .cards-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            width: 70px;
+            height: 96px;
+            background: white;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.1s;
+            box-shadow: 0 5px 0 #aa8e54;
+            border: 1px solid #e9d49c;
+        }
+
+        .card.empty {
+            background: #2e6042;
+            box-shadow: inset 0 0 0 2px #8ab876;
+            color: #dfe6b0;
+            font-size: 1.8rem;
+        }
+
+        .rank {
+            font-size: 1.8rem;
+            line-height: 1;
+        }
+
+        .suit {
+            font-size: 1.8rem;
+        }
+
+        .stage-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .mini-btn {
+            background: #4b6e3a;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 40px;
+            color: #f5e6b2;
+            cursor: pointer;
+            font-size: 0.7rem;
+        }
+
+        /* 配置区 */
+        .config-area {
+            background: #252f1c;
+            margin: 0 24px 20px;
+            padding: 18px;
+            border-radius: 32px;
+            border: 1px solid #8ba26a;
+        }
+
+        .input-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .input-group {
+            flex: 1;
+            background: #1b2612;
+            border-radius: 40px;
+            padding: 6px 14px;
+        }
+
+        .input-group label {
+            font-size: 0.65rem;
+            color: #ddcd8c;
+            display: block;
+        }
+
+        .input-group input {
+            background: #2f3d22;
+            border: none;
+            color: #ffefb9;
+            width: 100%;
+            padding: 6px 0;
+            border-radius: 30px;
+            outline: none;
+            font-weight: bold;
+        }
+
+        .opponent-item {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            background: #2c3b1f;
+            padding: 8px 12px;
+            border-radius: 60px;
+            margin-bottom: 8px;
+        }
+
+        .opponent-item select, .opponent-item input {
+            background: #3c4f2a;
+            border: none;
+            color: #ffefc0;
+            padding: 6px 12px;
+            border-radius: 36px;
+        }
+
+        .del-opp {
+            background: #7a4c36;
+            border: none;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            color: white;
+        }
+
+        /* 按钮组 */
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            margin: 0 24px 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 12px;
+            border-radius: 60px;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background: #e8bc48;
+            color: #1f2b0e;
+        }
+
+        .btn-secondary {
+            background: #5c6e42;
+            color: #f7efcf;
+        }
+
+        .btn-ai {
+            background: #2d6a5c;
+            color: #faf0cf;
+        }
+
+        /* 结果区 */
+        .result-area {
+            background: #1d2416;
+            margin: 0 24px 24px;
+            padding: 20px;
+            border-radius: 36px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 12px;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .stat-card {
+            background: #111e0c;
+            border-radius: 28px;
+            padding: 12px;
+            text-align: center;
+            flex: 1;
+        }
+
+        .stat-number {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #f3cd6c;
+        }
+
+        .progress-bar {
+            background: #2d3a22;
+            border-radius: 20px;
+            height: 12px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+
+        .progress-fill {
+            width: 0%;
+            height: 100%;
+            background: #f5bc3c;
+            transition: width 0.3s;
+        }
+
+        .hand-info {
+            background: #2a3420;
+            border-radius: 24px;
+            padding: 12px;
+            margin: 12px 0;
+        }
+
+        .draw-info {
+            background: #202919;
+            border-radius: 24px;
+            padding: 12px;
+            font-size: 0.85rem;
+        }
+
+        .ai-response {
+            background: #202817;
+            border-radius: 28px;
+            padding: 14px;
+            margin-top: 15px;
+            font-size: 0.85rem;
+            color: #d8cf9a;
+            display: none;
+        }
+
+        .badge {
+            background: #2c3522;
+            border-radius: 60px;
+            padding: 12px;
+            text-align: center;
+            margin-top: 12px;
+            font-weight: bold;
+        }
+
+        .ev-positive { color: #a3e084; }
+        .ev-negative { color: #ff9f7a; }
+
+        footer {
+            text-align: center;
+            padding: 16px;
+            font-size: 0.6rem;
+            color: #7e6f48;
+        }
+
+        @media (max-width: 600px) {
+            .card { width: 55px; height: 78px; }
+            .rank, .suit { font-size: 1.3rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="main-card">
+        <div class="header">
+            <h1>♠️ 德扑胜率模拟器 ♣️</h1>
+            <div class="sub">AI辅助决策 · 蒙特卡洛算法 · DeepSeek大模型分析</div>
+            <div class="sub" style="color:#ffaa66; font-size:0.7rem;">⚠️ 公共牌必须按顺序填写 (翻牌→转牌→河牌)</div>
+        </div>
+
+        <!-- 模式切换 -->
+        <div class="mode-switch">
+            <button class="mode-btn active" id="modeBasic">🎯 基础模式</button>
+            <button class="mode-btn" id="modeAdvanced">💰 进阶模式 (赔率+EV)</button>
+        </div>
+
+        <!-- 牌区 -->
+        <div class="felt">
+            <div class="section-title">🃟 我的手牌</div>
+            <div class="cards-row" id="holeCards"></div>
+
+            <div class="section-title">🌊 公共牌 (必须按顺序填写)</div>
+            <div class="cards-row" id="communityCards"></div>
+
+            <div class="stage-buttons">
+                <button class="mini-btn" id="btnFlop">📌 翻牌圈 (填写1-3张)</button>
+                <button class="mini-btn" id="btnTurn">🔄 转牌圈 (填写第4张)</button>
+                <button class="mini-btn" id="btnRiver">🌊 河牌圈 (填写第5张)</button>
+                <button class="mini-btn" id="btnClearBoard">🗑️ 清空公共牌</button>
+            </div>
+            <div style="font-size: 11px; color: #ffaa66; text-align: center; margin-top: 10px;">
+                ⚠️ 规则：必须先填翻牌(前3张)，才能填转牌(第4张)，最后填河牌(第5张)
+            </div>
+        </div>
+
+        <!-- 动态配置区 -->
+        <div id="configPanel" class="config-area">
+            <div class="input-row">
+                <div class="input-group">
+                    <label>👥 对手人数</label>
+                    <input type="number" id="opponentCount" min="1" max="8" value="6">
+                </div>
+            </div>
+        </div>
+
+        <!-- 按钮组 -->
+        <div class="action-buttons">
+            <button class="btn btn-primary" id="calcBtn">🧮 计算胜率</button>
+            <button class="btn btn-secondary" id="resetBtn">🔄 重置</button>
+            <button class="btn btn-ai" id="aiBtn">🤖 AI分析 (DeepSeek)</button>
+        </div>
+
+        <!-- 结果区 -->
+        <div class="result-area" id="resultArea">
+            <div class="stats">
+                <div class="stat-card">胜率<br><span id="winRate" class="stat-number">--%</span></div>
+                <div class="stat-card">平局<br><span id="tieRate" class="stat-number">--%</span></div>
+                <div class="stat-card">输率<br><span id="loseRate" class="stat-number">--%</span></div>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" id="winProgress"></div></div>
+
+            <div class="hand-info">
+                🎴 当前牌型：<strong id="handType">--</strong> &nbsp;| 强度：<span id="handStrength">--</span>
+            </div>
+
+            <div class="draw-info" id="drawInfo">
+                🎯 听牌潜力：--<br>
+                📈 提升概率：--
+            </div>
+
+            <div id="advancedInfo" style="display: none;">
+                <div class="stats">
+                    <div class="stat-card">底池赔率<br><span id="potOdds" class="stat-number">--%</span></div>
+                    <div class="stat-card">期望价值(EV)<br><span id="evValue" class="stat-number">-- BB</span></div>
+                </div>
+            </div>
+
+            <div id="actionAdvice" class="badge">⚡ 点击「计算胜率」获取建议</div>
+            <div id="aiResponse" class="ai-response"></div>
+        </div>
+
+        <footer>基于蒙特卡洛模拟(10,000次) | AI分析需配置DeepSeek API Key</footer>
+    </div>
+</div>
+
+<script>
+    // 全局状态
+    let currentMode = 'basic';
+    let hole = [null, null];
+    let community = [null, null, null, null, null];
+    let basicOpponents = 6;
+    let advData = {
+        pot: 300,
+        call: 100,
+        opponents: []
+    };
+
+    // 牌面数据
+    const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+    const SUITS = ['♠', '♥', '♣', '♦'];
+
+    // 获取当前已填写的公共牌数量
+    function getFilledCommunityCount() {
+        return community.filter(c => c !== null).length;
+    }
+
+    // 检查是否可以设置指定位置的公共牌
+    function canSetCommunityCard(index) {
+        // 第0-2张是翻牌，必须按顺序填
+        if (index <= 2) {
+            // 检查前面的牌是否都已填
+            for (let i = 0; i < index; i++) {
+                if (community[i] === null) return false;
+            }
+            return true;
+        }
+        // 转牌(索引3)需要前3张都填了
+        if (index === 3) {
+            return community[0] !== null && community[1] !== null && community[2] !== null;
+        }
+        // 河牌(索引4)需要前4张都填了
+        if (index === 4) {
+            return community[0] !== null && community[1] !== null && community[2] !== null && community[3] !== null;
+        }
+        return false;
+    }
+
+    function getAllCards() {
+        let cards = [];
+        for (let r of RANKS) {
+            for (let s of SUITS) {
+                cards.push({ rank: r, suit: s, code: r + s });
+            }
+        }
+        return cards;
+    }
+
+    function getUsedCodes() {
+        let used = new Set();
+        hole.forEach(c => c && used.add(c.code));
+        community.forEach(c => c && used.add(c.code));
+        return used;
+    }
+
+    function openCardPicker(index, type) {
+        // 如果是公共牌，检查是否可以设置
+        if (type === 'community') {
+            if (!canSetCommunityCard(index)) {
+                let message = '';
+                if (index <= 2) {
+                    message = `⚠️ 必须按顺序填写翻牌！\n请先填写第${index+1}张之前的所有公共牌。`;
+                } else if (index === 3) {
+                    message = `⚠️ 必须先填写完翻牌(前3张)，才能填写转牌！`;
+                } else if (index === 4) {
+                    message = `⚠️ 必须先填写完翻牌和转牌，才能填写河牌！`;
+                }
+                alert(message);
+                return;
+            }
+        }
+
+        let all = getAllCards();
+        let used = getUsedCodes();
+        let available = all.filter(c => !used.has(c.code));
+
+        let modal = document.createElement('div');
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100%';
+        modal.style.height = '100%';
+        modal.style.backgroundColor = 'rgba(0,0,0,0.9)';
+        modal.style.zIndex = '3000';
+        modal.style.display = 'flex';
+        modal.style.justifyContent = 'center';
+        modal.style.alignItems = 'center';
+
+        let box = document.createElement('div');
+        box.style.background = '#302c1c';
+        box.style.borderRadius = '32px';
+        box.style.padding = '20px';
+        box.style.maxWidth = '90%';
+        box.style.maxHeight = '70%';
+        box.style.overflow = 'auto';
+        box.innerHTML = `<div style="color:#f7df9e; margin-bottom:12px;">选择扑克牌</div>
+                         <div id="pickerGrid" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+                         <button id="closePicker" style="margin-top:16px; background:#7c6a3a; padding:8px 20px; border-radius:40px;">取消</button>`;
+
+        let grid = box.querySelector('#pickerGrid');
+        available.forEach(card => {
+            let btn = document.createElement('button');
+            btn.textContent = `${card.rank}${card.suit}`;
+            btn.style.background = '#efdfaa';
+            btn.style.margin = '4px';
+            btn.style.padding = '8px 14px';
+            btn.style.borderRadius = '40px';
+            btn.style.cursor = 'pointer';
+            btn.onclick = () => {
+                if (type === 'hole') hole[index] = { rank: card.rank, suit: card.suit, code: card.code };
+                else community[index] = { rank: card.rank, suit: card.suit, code: card.code };
+                renderCards();
+                document.body.removeChild(modal);
+            };
+            grid.appendChild(btn);
+        });
+
+        modal.appendChild(box);
+        document.body.appendChild(modal);
+        document.getElementById('closePicker')?.addEventListener('click', () => document.body.removeChild(modal));
+    }
+
+    function renderCards() {
+        // 手牌
+        const holeDiv = document.getElementById('holeCards');
+        holeDiv.innerHTML = '';
+        for (let i = 0; i < 2; i++) {
+            let c = hole[i];
+            let div = document.createElement('div');
+            div.className = 'card' + (c ? '' : ' empty');
+            if (c) {
+                let color = (c.suit === '♥' || c.suit === '♦') ? '#c33' : '#222';
+                div.style.color = color;
+                div.innerHTML = `<div class="rank">${c.rank}</div><div class="suit">${c.suit}</div>`;
+            } else {
+                div.innerHTML = '<div style="font-size:1.8rem;">?</div>';
+            }
+            div.onclick = () => openCardPicker(i, 'hole');
+            holeDiv.appendChild(div);
+        }
+
+        // 公共牌 - 显示序号提示
+        const comDiv = document.getElementById('communityCards');
+        comDiv.innerHTML = '';
+        const positionNames = ['①翻牌1', '②翻牌2', '③翻牌3', '④转牌', '⑤河牌'];
+        for (let i = 0; i < 5; i++) {
+            let c = community[i];
+            let div = document.createElement('div');
+            div.className = 'card' + (c ? '' : ' empty');
+            if (c) {
+                let color = (c.suit === '♥' || c.suit === '♦') ? '#c33' : '#222';
+                div.style.color = color;
+                div.innerHTML = `<div class="rank">${c.rank}</div><div class="suit">${c.suit}</div>`;
+            } else {
+                div.innerHTML = `<div style="font-size:1rem;">${positionNames[i]}</div><div style="font-size:1.2rem;">?</div>`;
+            }
+            // 只有可设置时才允许点击
+            if (canSetCommunityCard(i)) {
+                div.style.cursor = 'pointer';
+                div.onclick = () => openCardPicker(i, 'community');
+            } else {
+                div.style.opacity = '0.6';
+                div.style.cursor = 'not-allowed';
+                div.onclick = () => {
+                    let msg = '';
+                    if (i <= 2) msg = `请先按顺序填写第${i+1}张之前的公共牌`;
+                    else if (i === 3) msg = '请先填写完翻牌(前3张)';
+                    else msg = '请先填写完翻牌和转牌';
+                    alert(`⚠️ ${msg}`);
+                };
+            }
+            comDiv.appendChild(div);
+        }
+    }
+
+    // 阶段辅助按钮
+    function stageHelper(targetCount) {
+        const currentCount = getFilledCommunityCount();
+        if (targetCount === 3) {
+            if (currentCount < 3) {
+                alert(`📌 翻牌圈：请手动点击前${3-currentCount}张公共牌卡片进行填写\n(必须按顺序填写)`);
+            } else {
+                alert('✅ 翻牌已填写完成，可以继续填写转牌');
+            }
+        } else if (targetCount === 4) {
+            if (currentCount >= 3) {
+                alert('🔄 转牌圈：请点击第④张公共牌卡片填写转牌');
+            } else {
+                alert(`⚠️ 请先填写完翻牌(前3张)，当前已填${currentCount}张`);
+            }
+        } else if (targetCount === 5) {
+            if (currentCount >= 4) {
+                alert('🌊 河牌圈：请点击第⑤张公共牌卡片填写河牌');
+            } else {
+                alert(`⚠️ 请先填写完翻牌和转牌，当前已填${currentCount}张`);
+            }
+        }
+    }
+
+    function renderConfigPanel() {
+        const panel = document.getElementById('configPanel');
+        if (currentMode === 'basic') {
+            panel.innerHTML = `
+                <div class="input-row">
+                    <div class="input-group">
+                        <label>👥 对手人数 (牌桌人数-1)</label>
+                        <input type="number" id="basicOpponent" min="1" max="8" value="${basicOpponents}">
+                    </div>
+                </div>
+                <div style="font-size:12px; color:#c5bc7a;">基础模式：计算胜率 + 牌型分析 + 听牌潜力</div>
+            `;
+            const input = document.getElementById('basicOpponent');
+            if (input) input.onchange = (e) => basicOpponents = parseInt(e.target.value) || 2;
+        } else {
+            panel.innerHTML = `
+                <div class="input-row">
+                    <div class="input-group"><label>💰 底池 (BB)</label><input type="number" id="advPot" value="${advData.pot}"></div>
+                    <div class="input-group"><label>⚡ 需跟注 (BB)</label><input type="number" id="advCall" value="${advData.call}"></div>
+                    <div class="input-group"><label>👥 对手人数</label><input type="number" id="advOppCnt" min="1" max="8" value="2"></div>
+                </div>
+                <div id="opponentList"></div>
+                <button id="addOppBtn" style="background:#6c8a4a; margin-top:8px; padding:6px 14px; border-radius:60px;">➕ 添加对手行动</button>
+            `;
+
+            document.getElementById('advPot')?.addEventListener('change', (e) => advData.pot = parseInt(e.target.value) || 0);
+            document.getElementById('advCall')?.addEventListener('change', (e) => advData.call = parseInt(e.target.value) || 0);
+
+            function updateOpponents() {
+                const cnt = parseInt(document.getElementById('advOppCnt')?.value || 2);
+                while (advData.opponents.length < cnt) advData.opponents.push({ action: 'call', amount: 50 });
+                while (advData.opponents.length > cnt) advData.opponents.pop();
+                renderOpponentList();
+            }
+
+            document.getElementById('advOppCnt')?.addEventListener('change', updateOpponents);
+            document.getElementById('addOppBtn')?.addEventListener('click', () => {
+                advData.opponents.push({ action: 'call', amount: 60 });
+                document.getElementById('advOppCnt').value = advData.opponents.length;
+                renderOpponentList();
+            });
+
+            renderOpponentList();
+        }
+    }
+
+    function renderOpponentList() {
+        const container = document.getElementById('opponentList');
+        if (!container) return;
+        let html = '<div style="color:#e0cf8c; margin-bottom:6px;">📋 对手行动 (根据牌局录入)</div>';
+        advData.opponents.forEach((opp, idx) => {
+            html += `<div class="opponent-item">
+                        <span style="min-width:38px;">👤${idx+1}</span>
+                        <select data-idx="${idx}" class="oppAction">
+                            <option value="fold" ${opp.action==='fold'?'selected':''}>弃牌</option>
+                            <option value="call" ${opp.action==='call'?'selected':''}>跟注</option>
+                            <option value="raise" ${opp.action==='raise'?'selected':''}>加注</option>
+                            <option value="allin" ${opp.action==='allin'?'selected':''}>All-in</option>
+                        </select>
+                        <input type="number" data-idx="${idx}" class="oppAmount" value="${opp.amount}" placeholder="金额(BB)" style="width:100px;">
+                        <button class="del-opp" data-idx="${idx}">✖</button>
+                    </div>`;
+        });
+        container.innerHTML = html;
+
+        document.querySelectorAll('.oppAction').forEach(sel => {
+            sel.onchange = (e) => advData.opponents[e.target.dataset.idx].action = e.target.value;
+        });
+        document.querySelectorAll('.oppAmount').forEach(inp => {
+            inp.onchange = (e) => advData.opponents[e.target.dataset.idx].amount = parseInt(e.target.value) || 0;
+        });
+        document.querySelectorAll('.del-opp').forEach(btn => {
+            btn.onclick = (e) => {
+                const idx = parseInt(e.target.dataset.idx);
+                advData.opponents.splice(idx, 1);
+                document.getElementById('advOppCnt').value = advData.opponents.length;
+                renderOpponentList();
+            };
+        });
+    }
+
+    async function calculate() {
+        if (!hole[0] || !hole[1]) {
+            alert('请先选择两张手牌');
+            return;
+        }
+
+        const calcBtn = document.getElementById('calcBtn');
+        calcBtn.textContent = '计算中...';
+        calcBtn.disabled = true;
+
+        const payload = {
+            hole: hole,
+            community: community,
+            mode: currentMode,
+            opponent_count: currentMode === 'basic' ? basicOpponents : advData.opponents.length
+        };
+
+        if (currentMode === 'advanced') {
+            payload.pot = advData.pot;
+            payload.call_amount = advData.call;
+        }
+
+        try {
+            const response = await fetch('/api/calculate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+
+            document.getElementById('winRate').innerHTML = data.win_rate + '%';
+            document.getElementById('tieRate').innerHTML = data.tie_rate + '%';
+            document.getElementById('loseRate').innerHTML = data.lose_rate + '%';
+            document.getElementById('winProgress').style.width = data.win_rate + '%';
+            document.getElementById('handType').innerHTML = data.hand_strength.type;
+            document.getElementById('handStrength').innerHTML = data.hand_strength.strength;
+
+            const drawHtml = data.draw_potential.draws.length > 0
+                ? data.draw_potential.draws.map(d => `• ${d.type} (${d.outs} outs, ${d.probability}%)`).join('<br>')
+                : '暂无显著听牌';
+            document.getElementById('drawInfo').innerHTML = `🎯 听牌潜力：<br>${drawHtml}<br>📈 提升概率：${data.draw_potential.improve_prob}%`;
+
+            if (currentMode === 'advanced' && data.pot_odds !== undefined) {
+                document.getElementById('advancedInfo').style.display = 'block';
+                document.getElementById('potOdds').innerHTML = data.pot_odds + '%';
+                const evSpan = document.getElementById('evValue');
+                evSpan.innerHTML = data.ev + ' BB';
+                evSpan.className = `stat-number ${data.ev >= 0 ? 'ev-positive' : 'ev-negative'}`;
+                document.getElementById('actionAdvice').innerHTML = `💡 ${data.action_suggestion}`;
+            } else {
+                document.getElementById('advancedInfo').style.display = 'none';
+                document.getElementById('actionAdvice').innerHTML = `📊 胜率 ${data.win_rate}% | 可根据对手人数调整策略`;
+            }
+
+            window.lastWinRate = data.win_rate;
+
+        } catch (err) {
+            alert('计算失败: ' + err.message);
+        } finally {
+            calcBtn.textContent = '🧮 计算胜率';
+            calcBtn.disabled = false;
+        }
+    }
+
+    async function aiAnalyze() {
+        if (!hole[0] || !hole[1]) {
+            alert('请先选择手牌');
+            return;
+        }
+
+        const aiDiv = document.getElementById('aiResponse');
+        aiDiv.style.display = 'block';
+        aiDiv.innerHTML = '🤖 AI思考中，调用DeepSeek大模型...';
+
+        const payload = {
+            hole: hole,
+            community: community,
+            win_rate: parseFloat(document.getElementById('winRate').innerHTML) || 0,
+            mode: currentMode
+        };
+
+        if (currentMode === 'advanced') {
+            payload.pot = advData.pot;
+            payload.call_amount = advData.call;
+        }
+
+        try {
+            const response = await fetch('/api/ai_analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            aiDiv.innerHTML = `✨ AI复盘分析：<br>${data.analysis.replace(/\n/g, '<br>')}`;
+        } catch (err) {
+            aiDiv.innerHTML = `⚠️ AI分析失败: ${err.message}<br>请确保已设置环境变量 DEEPSEEK_API_KEY`;
+        }
+    }
+
+    function resetAll() {
+        hole = [null, null];
+        community = [null, null, null, null, null];
+        renderCards();
+        document.getElementById('winRate').innerHTML = '--%';
+        document.getElementById('tieRate').innerHTML = '--%';
+        document.getElementById('loseRate').innerHTML = '--%';
+        document.getElementById('winProgress').style.width = '0%';
+        document.getElementById('advancedInfo').style.display = 'none';
+        document.getElementById('actionAdvice').innerHTML = '⚡ 点击「计算胜率」获取建议';
+        document.getElementById('aiResponse').style.display = 'none';
+        document.getElementById('handType').innerHTML = '--';
+        document.getElementById('handStrength').innerHTML = '--';
+        document.getElementById('drawInfo').innerHTML = '🎯 听牌潜力：--<br>📈 提升概率：--';
+    }
+
+    // 事件绑定
+    document.getElementById('modeBasic').onclick = () => {
+        currentMode = 'basic';
+        document.getElementById('modeBasic').classList.add('active');
+        document.getElementById('modeAdvanced').classList.remove('active');
+        renderConfigPanel();
+        document.getElementById('advancedInfo').style.display = 'none';
+    };
+
+    document.getElementById('modeAdvanced').onclick = () => {
+        currentMode = 'advanced';
+        document.getElementById('modeAdvanced').classList.add('active');
+        document.getElementById('modeBasic').classList.remove('active');
+        renderConfigPanel();
+    };
+
+    document.getElementById('calcBtn').onclick = calculate;
+    document.getElementById('resetBtn').onclick = resetAll;
+    document.getElementById('aiBtn').onclick = aiAnalyze;
+
+    // 阶段按钮
+    document.getElementById('btnFlop').onclick = () => stageHelper(3);
+    document.getElementById('btnTurn').onclick = () => stageHelper(4);
+    document.getElementById('btnRiver').onclick = () => stageHelper(5);
+    document.getElementById('btnClearBoard').onclick = () => {
+        community = [null, null, null, null, null];
+        renderCards();
+    };
+
+    // 初始化
+    renderCards();
+    renderConfigPanel();
+</script>
+</body>
+</html>
