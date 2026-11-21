@@ -202,6 +202,22 @@ function renderSettlement() {
     }).join('');
 }
 
+function renderBoard(previous, bestCards, kicker) {
+  const firstNewCard = previous?.hand === state.hand ? previous.board.length : state.board.length;
+  for (const [index, slot] of Array.from($('board').children).entries()) {
+    const card = state.board[index];
+    slot.firstElementChild.innerHTML = cardHTML(card, false, bestCards, kicker);
+    slot.classList.toggle('covered', !card);
+    slot.lastElementChild.setAttribute('aria-hidden', String(Boolean(card)));
+    if (!card) {
+      slot.classList.remove('revealing');
+    } else if (index >= firstNewCard) {
+      slot.style.setProperty('--reveal-delay', `${(index - firstNewCard) * 85}ms`);
+      slot.classList.add('revealing');
+    }
+  }
+}
+
 function render(previous) {
   if (!state) return;
   $('tableSize').textContent = `${state.player_count} 人局 · ${state.players.filter(p=>p.stack > 0 || (!state.done && !p.folded)).length} 人在桌`;
@@ -210,7 +226,7 @@ function render(previous) {
   $('pot').textContent = state.pot.toLocaleString();
   const pot = state.done ? state.result[selectedPot] : null;
   const boardBest = pot?.seats.flatMap(i => state.players[i].best_five || []) || [];
-  $('board').innerHTML = Array.from({length:5}, (_,i)=>cardHTML(state.board[i], false, boardBest, pot?.kicker)).join('');
+  renderBoard(previous, boardBest, pot?.kicker);
   $('opponents').innerHTML = state.players.slice(1).map(seatHTML).join('');
   arrangeSeats();
   $('hero').innerHTML = seatHTML(state.players[0]);
@@ -225,8 +241,8 @@ function render(previous) {
   for (const button of fixedRaiseButtons) {
     button.disabled = busy || !yourTurn || !isLegalRaise(Number(button.dataset.raiseTo));
   }
-  $('raiseHint').textContent = '';
-  $('deal').hidden = !state.done;
+  $('startTable').hidden = true;
+  $('nextHand').hidden = !state.done || tableExpired;
   if (yourTurn) {
     const legal = state.legal;
     const callAmount = legal.call.toLocaleString();
@@ -234,15 +250,13 @@ function render(previous) {
     $('call').disabled = $('fold').disabled = busy;
     $('raise').disabled = busy || !legal.can_raise;
     $('raise').textContent = legal.can_raise ? (legal.short_allin ? `全下至 ${legal.max_raise_to}` : '加注') : '不可加注';
-    $('raise').title = legal.raise_reason || '';
-    $('raiseHint').textContent = legal.raise_reason || '';
     $('raiseAmount').min = Math.min(legal.min_raise_to, legal.max_raise_to);
     $('raiseAmount').max = legal.max_raise_to;
     if ($('raiseAmount').dataset.version !== String(state.version)) {
       $('raiseAmount').value = fitRaiseAmount(lastRaiseAmount);
       $('raiseAmount').dataset.version = state.version;
     }
-    updateRaisePreview();
+    updateRaiseButton();
   }
   const tableOver = state.players[0].stack === 0 || state.players.filter(p=>p.stack > 0).length < 2;
   $('deal').textContent = tableOver ? '重新开桌 →' : '发下一手 →';
@@ -343,28 +357,21 @@ function fitRaiseAmount(amount) {
   return Math.round(Math.min(maximum, Math.max(minimum, amount || minimum)));
 }
 
-function updateRaisePreview() {
+function updateRaiseButton() {
   const legal = state?.legal;
-  if (!legal?.can_raise) {
-    $('raiseHint').textContent = legal?.raise_reason || '';
-    return;
-  }
+  if (!legal?.can_raise) return;
   const amount = $('raiseAmount').valueAsNumber;
-  const minimum = Math.min(legal.min_raise_to, legal.max_raise_to);
   const valid = isLegalRaise(amount);
   $('raise').disabled = busy || !valid;
   $('raise').textContent = valid && amount === legal.max_raise_to ? '全下' : '加注';
-  $('raiseHint').textContent = valid
-    ? `本次再付 ${(amount - state.players[0].bet).toLocaleString()} · 加注到 ${amount.toLocaleString()}`
-    : `请输入 ${minimum.toLocaleString()}–${legal.max_raise_to.toLocaleString()} 的整数`;
 }
 function setRaise(target) {
   const legal = state?.legal;
   if (!legal?.can_raise) return;
   $('raiseAmount').value = fitRaiseAmount(target);
-  updateRaisePreview();
+  updateRaiseButton();
 }
-$('raiseAmount').oninput = updateRaisePreview;
+$('raiseAmount').oninput = updateRaiseButton;
 $('settlement').onclick = event => {
   const button = event.target.closest('[data-pot]');
   if (!button) return;
@@ -389,7 +396,8 @@ for (const button of fixedRaiseButtons) {
 $('halfPot').onclick = ()=>setRaise(state.players[0].bet + state.legal.call + Math.floor((state.pot+state.legal.call)/2));
 $('potRaise').onclick = ()=>setRaise(state.players[0].bet + state.legal.call + state.pot + state.legal.call);
 $('allin').onclick = ()=>setRaise(state.legal.max_raise_to);
-$('deal').onclick = ()=> !state || state.players[0].stack === 0 || state.players.filter(p=>p.stack>0).length<2 ? openSettings() : mutate('next');
+$('deal').onclick = ()=> state.players[0].stack === 0 || state.players.filter(p=>p.stack>0).length<2 ? openSettings() : mutate('next');
+$('startTable').onclick = openSettings;
 function openSettings() {
   $('playerCount').value = state?.player_count || 4;
   $('startingChips').value = state?.starting_stack || 1000;
@@ -418,7 +426,11 @@ async function initialize() {
 document.querySelector('.action-area').dataset.mode = 'done';
 $('actions').hidden = false;
 $('raiseControls').hidden = false;
-$('board').innerHTML = Array.from({length:5},()=>cardHTML(null)).join('');
+$('board').innerHTML = Array.from({length:5}, () => `
+  <div class="board-card covered">
+    <div class="board-card-face">${cardHTML(null)}</div>
+    <div class="board-card-back" role="img" aria-label="未翻开的公共牌">${cardHTML(null, true)}</div>
+  </div>`).join('');
 const lobby = ['你','林间客','晚风','松石'].map((name,seat)=>({name,seat,stack:1000,hole:[],card_count:2,last_action:'等待发牌'}));
 $('opponents').innerHTML = lobby.slice(1).map(seatHTML).join('');
 $('hero').innerHTML = seatHTML(lobby[0]);
