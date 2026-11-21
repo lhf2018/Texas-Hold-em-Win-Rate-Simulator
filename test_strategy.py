@@ -11,7 +11,6 @@ class StrategyTests(unittest.TestCase):
     def test_per_player_last_raise_locks_everyone_and_resets(self):
         g = Game(1)
         g.start_hand()
-        self.assertEqual(g.rule_mode, 'per_player')
         # 初始顺序 3 -> 0 -> 1 -> 2；0 和 1 尚未使用加注机会。
         g.act(3, 'raise', 40)
         g.act(0, 'call')
@@ -22,7 +21,7 @@ class StrategyTests(unittest.TestCase):
         for seat in (3, 0, 1):
             self.assertEqual(g.actor, seat)
             self.assertFalse(g.legal(seat)['can_raise'])
-            self.assertIn('最后一位', g.legal(seat)['raise_reason'])
+            self.assertIn('首轮行动已结束', g.legal(seat)['raise_reason'])
             before = copy.deepcopy(g.public_view())
             with self.assertRaises(ValueError):
                 g.act(seat, 'raise', 160)
@@ -38,6 +37,36 @@ class StrategyTests(unittest.TestCase):
         self.assertTrue(g.raises_closed)
         self.assertFalse(g.legal(1)['can_raise'])
 
+    def test_every_postflop_street_reopens_hero_before_last_player_locks(self):
+        g = Game(1)
+        # 庄家在座位1，翻牌后玩家0先于最后行动的庄家行动。
+        g.button = 0
+        g.start_hand()
+        self.assertEqual(g.button, 1)
+        while g.street == 0:
+            g.act(g.actor, 'call' if g.legal(g.actor)['call'] else 'check')
+        for street in (1, 2, 3):
+            self.assertEqual(g.street, street)
+            self.assertFalse(g.raises_closed)
+            self.assertEqual(g.raised_seats, set())
+            # 初始顺序2 -> 3 -> 0 -> 1，玩家0未加注先过牌。
+            g.act(2, 'check')
+            g.act(3, 'check')
+            self.assertTrue(g.public_view()['legal']['can_raise'])
+            g.act(0, 'check')
+            g.act(1, 'raise', 20)
+            self.assertTrue(g.raises_closed)
+            for seat in (2, 3):
+                g.act(seat, 'call')
+            view = g.public_view()
+            self.assertEqual(view['actor'], 0)
+            self.assertNotIn(0, g.raised_seats)
+            self.assertFalse(view['legal']['can_raise'])
+            self.assertIn('首轮行动已结束', view['legal']['raise_reason'])
+            self.assertEqual(view['legal']['call'], 20)
+            g.act(0, 'call')
+        self.assertTrue(g.done)
+
     def test_per_player_cannot_raise_twice_even_before_lock(self):
         g = Game(1)
         g.start_hand()
@@ -45,14 +74,31 @@ class StrategyTests(unittest.TestCase):
         g.act(0, 'raise', 80)
         g.act(1, 'call')
         g.act(2, 'call')
-        self.assertFalse(g.raises_closed)
+        self.assertTrue(g.raises_closed)
         self.assertEqual(g.actor, 3)
         self.assertFalse(g.legal(3)['can_raise'])
-        self.assertIn('已加注一次', g.legal(3)['raise_reason'])
+        self.assertIn('首轮行动已结束', g.legal(3)['raise_reason'])
         g.act(3, 'call')
         self.assertEqual(g.street, 1)
 
-    def test_per_player_unused_raise_survives_if_last_player_only_calls(self):
+    def test_first_pass_can_raise_above_highest_then_only_match(self):
+        g = Game(1)
+        g.start_hand()
+        g.act(3, 'call')
+        g.act(0, 'raise', 60)
+        self.assertTrue(g.legal(1)['can_raise'])
+        self.assertEqual(g.legal(1)['min_raise_to'], 61)
+        g.act(1, 'raise', 61)
+        self.assertTrue(g.legal(2)['can_raise'])
+        g.act(2, 'raise', 62)
+        for seat in (3, 0, 1):
+            self.assertEqual(g.actor, seat)
+            self.assertFalse(g.legal(seat)['can_raise'])
+            self.assertEqual(g.legal(seat)['call'], 62-g.players[seat]['bet'])
+            g.act(seat, 'call')
+        self.assertEqual(g.street, 1)
+
+    def test_first_pass_ends_even_if_last_player_only_calls(self):
         g = Game(1)
         g.start_hand()
         g.act(3, 'call')
@@ -60,12 +106,10 @@ class StrategyTests(unittest.TestCase):
         g.act(1, 'call')
         g.act(2, 'call')
         self.assertEqual(g.actor, 3)
-        self.assertFalse(g.raises_closed)
-        self.assertTrue(g.legal(3)['can_raise'])
-        g.act(3, 'raise', 100)
-        self.assertFalse(g.legal(0)['can_raise'])
-        g.act(0, 'call')
-        self.assertTrue(g.legal(1)['can_raise'])
+        self.assertNotIn(3, g.raised_seats)
+        self.assertFalse(g.legal(3)['can_raise'])
+        g.act(3, 'call')
+        self.assertEqual(g.street, 1)
 
     def test_per_player_heads_up_last_allin_closes_raise_rights(self):
         g = Game(1, player_count=2)
@@ -79,51 +123,36 @@ class StrategyTests(unittest.TestCase):
         self.assertTrue(g.done)
         self.assertEqual(len(g.board), 5)
 
-    def test_standard_reraise_and_short_allin_does_not_reopen(self):
-        g = Game(1, rule_mode='standard')
+    def test_short_allin_does_not_block_later_first_actions(self):
+        g = Game(1)
         g.start_hand()
-        g.act(3, 'raise', 100)
-        g.act(0, 'raise', 200)
-        g.act(1, 'call')
-        g.players[2]['stack'] = 230-g.players[2]['bet']
-        g.act(2, 'raise', 230)
-        g.act(3, 'call')
-        self.assertFalse(g.legal(0)['can_raise'])
-        self.assertEqual(g.actor, 0)
+        for seat in (3, 0, 1):
+            g.act(seat, 'call')
+        g.act(2, 'check')
+        g.players[1]['stack'] = 10
+        g.act(1, 'raise', 10)
+        for seat, target in ((2, 11), (3, 12), (0, 13)):
+            self.assertTrue(g.legal(seat)['can_raise'])
+            self.assertEqual(g.legal(seat)['min_raise_to'], target)
+            g.act(seat, 'raise', target)
+        self.assertTrue(g.raises_closed)
+        for seat in (2, 3):
+            self.assertFalse(g.legal(seat)['can_raise'])
+            g.act(seat, 'call')
+        self.assertEqual(g.street, 2)
 
-    def test_raise_reasons_and_full_reraise(self):
-        practice = Game(1, rule_mode='practice')
-        practice.start_hand()
-        practice.act(3, 'raise', 100)
-        self.assertIn('练习模式', practice.legal(0)['raise_reason'])
-        g = Game(1, rule_mode='standard')
-        g.start_hand()
-        g.act(3, 'raise', 100)
-        self.assertTrue(g.legal(0)['can_raise'])
-        self.assertEqual(g.legal(0)['min_raise_to'], 180)
-        g.act(0, 'raise', 180)
-        g.act(1, 'call')
-        g.act(2, 'raise', 300)
-        self.assertTrue(g.legal(3)['can_raise'])
-        self.assertEqual(g.legal(3)['min_raise_to'], 420)
-        g.players[3]['stack'] = 100
-        self.assertFalse(g.legal(3)['can_raise'])
-        self.assertIn('仅够跟注', g.legal(3)['raise_reason'])
-
-    def test_cumulative_short_raises_reopen_rights(self):
-        g = Game(1, rule_mode='standard')
-        g.start_hand()
-        g.act(3, 'raise', 100)
-        g.act(0, 'call')
-        g.players[1]['stack'] = 140-g.players[1]['bet']
-        g.act(1, 'raise', 140)
-        g.players[2]['stack'] = 180-g.players[2]['bet']
-        g.act(2, 'raise', 180)
-        self.assertTrue(g.legal(3)['can_raise'])
-        self.assertEqual(g.legal(3)['min_raise_to'], 260)
+    def test_table_has_one_rule_and_no_selector(self):
+        from app import app
+        client = app.test_client()
+        page = client.get('/').get_data(as_text=True)
+        self.assertNotIn('ruleMode', page)
+        # 旧客户端的模式字段不能再切换服务端规则。
+        response = client.post('/api/game/new', json={'rule_mode': 'practice'})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('rule_mode', response.json)
 
     def test_no_raise_into_allin_opponents(self):
-        g = Game(1, player_count=2, rule_mode='standard')
+        g = Game(1, player_count=2)
         g.start_hand()
         g.players[0]['stack'] = 90
         g.act(0, 'raise', 100)
@@ -147,7 +176,7 @@ class StrategyTests(unittest.TestCase):
         self.assertEqual(g.public_view()['review'], [])
 
     def test_statistics_persist_and_count_once_per_hand(self):
-        g = Game(2, rule_mode='standard')
+        g = Game(2)
         g.start_hand()
         g.act(3,'raise',40)
         g.act(0,'raise',80)

@@ -8,12 +8,12 @@ from game import Game
 from poker import simulate_equity
 
 
-def benchmark(pairs=100, seed=42, mode='per_player', samples=256):
+def benchmark(pairs=100, seed=42, samples=256):
     results = []
     for pair in range(pairs):
         paired = []
         for new_seat in (0, 1):
-            game = Game(seed+pair, player_count=2, rule_mode=mode)
+            game = Game(seed+pair, player_count=2)
             # 每次复制相同牌堆与庄位；只交换策略，重置筹码避免淘汰偏差。
             game.start_hand()
             rng = random.Random(seed+pair+100000)
@@ -36,7 +36,7 @@ def benchmark(pairs=100, seed=42, mode='per_player', samples=256):
         results.append(statistics.mean(paired))
     mean = statistics.mean(results)*100
     error = 1.96*statistics.stdev(results)/math.sqrt(pairs)*100 if pairs > 1 else None
-    return dict(pairs=pairs, hands=pairs*2, seed=seed, rule_mode=mode,
+    return dict(pairs=pairs, hands=pairs*2, seed=seed,
                 bb_per_100=round(mean,2), approximate_95_half_width=round(error,2) if error is not None else None,
                 note='单挑、每手重置筹码；配对正态近似区间，小样本不足以判定强弱。')
 
@@ -46,8 +46,7 @@ if __name__ == '__main__':
     parser.add_argument('--pairs', type=int, default=100)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--samples', type=int, default=256)
-    parser.add_argument('--mode', choices=['per_player','practice','standard'], default='per_player')
     args = parser.parse_args()
     if args.pairs < 1 or args.samples < 1:
         parser.error('pairs 和 samples 必须为正数')
-    print(benchmark(args.pairs, args.seed, args.mode, args.samples))
+    print(benchmark(args.pairs, args.seed, args.samples))

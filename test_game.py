@@ -62,25 +62,6 @@ class GameTests(unittest.TestCase):
         g.finish()
         self.assertEqual([p['stack'] for p in g.players],[1100,900,1000,1000])
 
-    def test_one_raise_per_street(self):
-        g=Game(3, rule_mode='practice');g.start_hand()
-        self.assertTrue(g.legal(3)['can_raise'])
-        g.act(3,'raise',100)
-        self.assertTrue(g.raise_used)
-        before=g.public_view()
-        for seat in (0,1,2):
-            self.assertFalse(g.legal(seat)['can_raise'])
-        with self.assertRaises(ValueError):g.act(0,'raise',200)
-        self.assertEqual(before,g.public_view())
-        for seat in (0,1,2):g.act(seat,'call')
-        self.assertEqual(g.street,1)
-        self.assertFalse(g.raise_used)
-        g.act(1,'check');g.act(2,'raise',40)
-        self.assertFalse(g.legal(3)['can_raise'])
-        for seat in (3,0,1):g.act(seat,'call')
-        self.assertEqual(g.street,2)
-        self.assertTrue(g.legal(g.actor)['can_raise'])
-
     def test_no_private_information(self):
         g=Game(5);g.start_hand();g.act(3,'call')
         view=g.public_view()
@@ -106,19 +87,6 @@ class GameTests(unittest.TestCase):
         g.act(0,'raise',1000);g.act(1,'call')
         self.assertTrue(g.done);self.assertEqual(len(g.board),5)
         self.assertEqual(sum(p['stack'] for p in g.players),2000)
-
-    def test_short_allin_uses_raise_opportunity(self):
-        g=Game(8, rule_mode='practice');g.start_hand()
-        for seat in (3,0,1):g.act(seat,'call')
-        g.act(2,'check')
-        g.act(1,'check')
-        g.players[2]['stack']=10
-        g.act(2,'raise',10)
-        for seat in (3,0,1):
-            self.assertFalse(g.legal(seat)['can_raise'])
-            g.act(seat,'call')
-        self.assertEqual(g.street,2)
-        self.assertFalse(g.raise_used)
 
     def test_configurable_two_to_ten_players(self):
         for count in range(2,11):

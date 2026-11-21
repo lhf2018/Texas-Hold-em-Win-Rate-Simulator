@@ -225,7 +225,7 @@ function render(previous) {
   for (const button of fixedRaiseButtons) {
     button.disabled = busy || !yourTurn || !isLegalRaise(Number(button.dataset.raiseTo));
   }
-  $('raiseHint').textContent = state.raise_used && state.rule_mode === 'practice' ? '本轮已加注' : '';
+  $('raiseHint').textContent = '';
   $('deal').hidden = !state.done;
   if (yourTurn) {
     const legal = state.legal;
@@ -248,7 +248,6 @@ function render(previous) {
   $('deal').textContent = tableOver ? '重新开桌 →' : '发下一手 →';
   $('deal').disabled = busy;
   renderSettlement();
-  $('ruleLabel').textContent = ({per_player:'每人每轮一次加注', standard:'标准再加注桌', practice:'单次加注练习桌'})[state.rule_mode];
   $('reviewPanel').hidden = !state.done || !state.review?.length;
   $('review').innerHTML = (state.done ? state.review || [] : []).map(d =>
     `<p>${escapeHTML(state.players[d.seat].name)} · ${['翻牌前','翻牌','转牌','河牌'][d.street]} · ${escapeHTML(d.action)} ${d.amount ?? ''}<br>权益 ${d.equity}% ±${d.error_95} 个百分点 · ${d.samples} 样本<br>${d.candidates.map(c => `${escapeHTML(c.action)} ${c.amount ?? ''}: EV ${c.ev} ±${c.error_95}`).join(' / ')}<br>${d.ranges.map(r => `${escapeHTML(state.players[r.seat].name)}：${escapeHTML(r.range)}（${r.actions} 次公开行动）`).join('；')}<br>${escapeHTML(d.assumption)}</p>`
@@ -393,7 +392,6 @@ $('allin').onclick = ()=>setRaise(state.legal.max_raise_to);
 $('deal').onclick = ()=> !state || state.players[0].stack === 0 || state.players.filter(p=>p.stack>0).length<2 ? openSettings() : mutate('next');
 function openSettings() {
   $('playerCount').value = state?.player_count || 4;
-  $('ruleMode').value = 'per_player';
   $('startingChips').value = state?.starting_stack || 1000;
   $('restartDialog').showModal();
 }
@@ -409,7 +407,7 @@ $('tableSettings').onsubmit = event=>{
   const starting_stack = Number($('startingChips').value);
   if (!Number.isInteger(starting_stack)) return;
   $('restartDialog').close();
-  mutate('new', {player_count:Number($('playerCount').value), starting_stack, rule_mode:$('ruleMode').value});
+  mutate('new', {player_count:Number($('playerCount').value), starting_stack});
 };
 for (const button of document.querySelectorAll('[data-stack]')) button.onclick = ()=>{ $('startingChips').value = button.dataset.stack; };
 $('analysisToggle').onchange = ()=>{ localStorage.setItem('poker-analysis', $('analysisToggle').checked ? 'on' : 'off'); updateAnalysis(); };

@@ -20,14 +20,11 @@ def pot_layers(players):
 
 
 class Game:
-    def __init__(self, seed=None, player_count=4, starting_stack=1000, rule_mode="per_player"):
+    def __init__(self, seed=None, player_count=4, starting_stack=1000):
         if type(player_count) is not int or not 2 <= player_count <= 10:
             raise ValueError('请选择2至10人局')
         if type(starting_stack) is not int or not 100 <= starting_stack <= 100000:
             raise ValueError('起始筹码须为100至100000的整数')
-        if rule_mode not in ('per_player', 'practice', 'standard'):
-            raise ValueError('无效规则模式')
-        self.rule_mode = rule_mode
         self.stats = {i: dict(hands=0, vpip=0, pfr=0, faced=0, folds=0) for i in range(player_count)}
         self.decisions = []
         self.starting_stack = starting_stack
@@ -119,27 +116,21 @@ class Game:
         p = self.players[seat]
         call = min(max(0, self.current_bet - p['bet']), p['stack'])
         maximum = p['bet'] + p['stack']
-        rights = p['acted_at'] is None or (p['acted_at'] == 0 and self.current_bet > 0) or self.current_bet - p['acted_at'] >= self.min_raise
         others = any(i != seat and not q['folded'] and q['stack'] > 0 for i, q in enumerate(self.players))
-        minimum = 20 if self.current_bet < 20 else self.current_bet + self.min_raise
+        minimum = self.current_bet + 1
         reason = ''
         if self.done or p['folded'] or not p['stack']:
             reason = '当前玩家不能行动'
-        elif self.rule_mode == 'practice' and self.raise_used:
-            reason = '练习模式每轮仅允许一次加注；可重新开桌选择标准模式'
-        elif self.rule_mode == 'per_player' and self.raises_closed:
-            reason = '最后一位玩家已加注，本轮只能跟注或弃牌'
-        elif self.rule_mode == 'per_player' and seat in self.raised_seats:
-            reason = '你本轮已加注一次，不能再次加注'
+        elif self.raises_closed:
+            reason = '本轮首轮行动已结束，现在只能跟齐最高下注或弃牌'
+        elif seat not in self.initial_pending:
+            reason = '你已完成本轮首次行动，现在只能跟齐最高下注或弃牌'
         elif maximum <= self.current_bet:
             reason = '剩余筹码仅够跟注或全下跟注'
         elif not others:
             reason = '其他未弃牌玩家均已全下，不能继续加注'
-        elif not rights:
-            reason = '短码全下未达到完整加注幅度，尚未重新开放你的加注权'
         return dict(call=call, min_raise_to=minimum, max_raise_to=maximum,
                     can_raise=not reason, raise_reason=reason,
-                    raise_used=self.raise_used and self.rule_mode == "practice",
                     short_allin=maximum < minimum)
 
     def act(self, seat, action, amount=None):
@@ -175,8 +166,8 @@ class Game:
             self.current_bet = amount
             self.raise_used = True
             self.raised_seats.add(seat)
-            # 只认本轮初始顺序的最后一人，不随加注后的补充行动移动。
-            if self.rule_mode == 'per_player' and self.initial_pending == {seat}:
+            # 首轮的末位加注后封口，补充行动不再允许加注。
+            if self.initial_pending == {seat}:
                 self.raises_closed = True
             self.pending.update(i for i, q in enumerate(self.players)
                                 if i != seat and not q['folded'] and q['stack'] > 0 and q['bet'] < amount)
@@ -196,6 +187,8 @@ class Game:
         p['acted_at'] = self.current_bet
         self.pending.discard(seat)
         self.initial_pending.discard(seat)
+        if not self.initial_pending:
+            self.raises_closed = True
         self.version += 1
         self.advance()
 
@@ -311,7 +304,7 @@ class Game:
                           hand_type=HAND_TYPE_NAMES[get_hand_rank(best_five)[0]] if best_five else None,
                           best_five=[c['code'] for c in best_five])
             players.append(player)
-        return dict(rule_mode=self.rule_mode, stats={i:dict(v) for i,v in self.stats.items()},
+        return dict(stats={i:dict(v) for i,v in self.stats.items()},
                     review=list(self.decisions) if self.done else [], player_count=len(self.players), starting_stack=self.starting_stack, players=players, board=list(self.board), street=self.street, stage=STREETS[self.street],
                     hand=self.hand, version=self.version, done=self.done, actor=self.actor,
                     raise_used=self.raise_used, pot=self.last_pot if self.done else sum(p['total'] for p in self.players),
