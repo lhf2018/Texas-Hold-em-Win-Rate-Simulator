@@ -63,7 +63,7 @@ class GameTests(unittest.TestCase):
         self.assertEqual([p['stack'] for p in g.players],[1100,900,1000,1000])
 
     def test_one_raise_per_street(self):
-        g=Game(3);g.start_hand()
+        g=Game(3, rule_mode='practice');g.start_hand()
         self.assertTrue(g.legal(3)['can_raise'])
         g.act(3,'raise',100)
         self.assertTrue(g.raise_used)
@@ -108,7 +108,7 @@ class GameTests(unittest.TestCase):
         self.assertEqual(sum(p['stack'] for p in g.players),2000)
 
     def test_short_allin_uses_raise_opportunity(self):
-        g=Game(8);g.start_hand()
+        g=Game(8, rule_mode='practice');g.start_hand()
         for seat in (3,0,1):g.act(seat,'call')
         g.act(2,'check')
         g.act(1,'check')

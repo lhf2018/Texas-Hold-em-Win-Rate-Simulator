@@ -20,12 +20,12 @@ def pot_layers(players):
 
 
 class Game:
-    def __init__(self, seed=None, player_count=4, starting_stack=1000, rule_mode="practice"):
+    def __init__(self, seed=None, player_count=4, starting_stack=1000, rule_mode="per_player"):
         if type(player_count) is not int or not 2 <= player_count <= 10:
             raise ValueError('请选择2至10人局')
         if type(starting_stack) is not int or not 100 <= starting_stack <= 100000:
             raise ValueError('起始筹码须为100至100000的整数')
-        if rule_mode not in ('practice', 'standard'):
+        if rule_mode not in ('per_player', 'practice', 'standard'):
             raise ValueError('无效规则模式')
         self.rule_mode = rule_mode
         self.stats = {i: dict(hands=0, vpip=0, pfr=0, faced=0, folds=0) for i in range(player_count)}
@@ -50,6 +50,9 @@ class Game:
         self.current_bet = 0
         self.min_raise = 20
         self.raise_used = False
+        self.raised_seats = set()
+        self.initial_pending = set()
+        self.raises_closed = False
         self.last_pot = 0
 
     def next_seat(self, seat, seats):
@@ -103,8 +106,14 @@ class Game:
             paid = self.pay(seat, amount)
             self.record(seat, label, paid)
         self.pending = {i for i in seats if self.players[i]['stack'] > 0}
+        self.reset_raise_round()
         self.actor = big
         self.advance()
+
+    def reset_raise_round(self):
+        self.raised_seats = set()
+        self.initial_pending = set(self.pending)
+        self.raises_closed = False
 
     def legal(self, seat):
         p = self.players[seat]
@@ -113,8 +122,23 @@ class Game:
         rights = p['acted_at'] is None or (p['acted_at'] == 0 and self.current_bet > 0) or self.current_bet - p['acted_at'] >= self.min_raise
         others = any(i != seat and not q['folded'] and q['stack'] > 0 for i, q in enumerate(self.players))
         minimum = 20 if self.current_bet < 20 else self.current_bet + self.min_raise
+        reason = ''
+        if self.done or p['folded'] or not p['stack']:
+            reason = '当前玩家不能行动'
+        elif self.rule_mode == 'practice' and self.raise_used:
+            reason = '练习模式每轮仅允许一次加注；可重新开桌选择标准模式'
+        elif self.rule_mode == 'per_player' and self.raises_closed:
+            reason = '最后一位玩家已加注，本轮只能跟注或弃牌'
+        elif self.rule_mode == 'per_player' and seat in self.raised_seats:
+            reason = '你本轮已加注一次，不能再次加注'
+        elif maximum <= self.current_bet:
+            reason = '剩余筹码仅够跟注或全下跟注'
+        elif not others:
+            reason = '其他未弃牌玩家均已全下，不能继续加注'
+        elif not rights:
+            reason = '短码全下未达到完整加注幅度，尚未重新开放你的加注权'
         return dict(call=call, min_raise_to=minimum, max_raise_to=maximum,
-                    can_raise=(self.rule_mode == 'standard' or not self.raise_used) and rights and others and maximum > self.current_bet,
+                    can_raise=not reason, raise_reason=reason,
                     raise_used=self.raise_used and self.rule_mode == "practice",
                     short_allin=maximum < minimum)
 
@@ -136,8 +160,10 @@ class Game:
             paid = self.pay(seat, legal['call'])
             self.record(seat, '全下跟注' if p['stack'] == 0 else '跟注', paid)
         elif action == 'raise':
-            if not legal['can_raise'] or type(amount) is not int:
-                raise ValueError('本轮已有人下注或加注，只能跟注、过牌或弃牌' if self.raise_used else '当前不可加注')
+            if not legal['can_raise']:
+                raise ValueError(legal['raise_reason'])
+            if type(amount) is not int:
+                raise ValueError('加注额必须为整数')
             if amount > legal['max_raise_to'] or amount <= self.current_bet or (amount < legal['min_raise_to'] and amount != legal['max_raise_to']):
                 raise ValueError('加注额不符合最小加注或全下规则')
             increase = amount - self.current_bet
@@ -148,6 +174,10 @@ class Game:
                 self.min_raise = increase
             self.current_bet = amount
             self.raise_used = True
+            self.raised_seats.add(seat)
+            # 只认本轮初始顺序的最后一人，不随加注后的补充行动移动。
+            if self.rule_mode == 'per_player' and self.initial_pending == {seat}:
+                self.raises_closed = True
             self.pending.update(i for i, q in enumerate(self.players)
                                 if i != seat and not q['folded'] and q['stack'] > 0 and q['bet'] < amount)
             self.record(seat, '全下加注' if p['stack'] == 0 else '加注到', amount)
@@ -165,6 +195,7 @@ class Game:
                 self.preflop_raised.add(seat)
         p['acted_at'] = self.current_bet
         self.pending.discard(seat)
+        self.initial_pending.discard(seat)
         self.version += 1
         self.advance()
 
@@ -192,6 +223,7 @@ class Game:
         for p in self.players:
             p['bet'], p['acted_at'] = 0, None
         self.pending = set(able) if len(able) >= 2 else set()
+        self.reset_raise_round()
         self.actor = self.button
         self.advance()
 

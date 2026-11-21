@@ -8,7 +8,7 @@
 <body>
 <main class="container">
 <header class="header"><div><h1>德扑模拟 <span>♠</span></h1></div></header>
-<div class="toolbar"><div class="table-info"><span id="ruleLabel">单次加注练习桌</span><span id="tableSize">4 人局</span><span>盲注 10 / 20</span><span id="startingStack">起始筹码 1,000</span></div><button id="restart" class="text-btn">↻ 重新开桌</button></div>
+<div class="toolbar"><div class="table-info"><span id="ruleLabel">每人每轮一次加注</span><span id="tableSize">4 人局</span><span>盲注 10 / 20</span><span id="startingStack">起始筹码 1,000</span></div><button id="restart" class="text-btn">↻ 重新开桌</button></div>
 <div class="layout">
 <section class="main-card">
 <div class="table-scene">
@@ -55,7 +55,7 @@
 <dialog id="restartDialog"><h2>开桌设置</h2>
 <form id="tableSettings">
 <label for="playerCount">牌桌人数</label><select id="playerCount"><option value="2">2 人局 · 单挑</option><option value="3">3 人局</option><option value="4" selected>4 人局</option><option value="5">5 人局</option><option value="6">6 人局</option><option value="7">7 人局</option><option value="8">8 人局</option><option value="9">9 人局</option><option value="10">10 人局</option></select>
-<label for="ruleMode">下注规则</label><select id="ruleMode"><option value="practice">练习模式 · 每轮一次加注</option><option value="standard">标准模式 · 支持再加注</option></select>
+<label for="ruleMode">下注规则</label><select id="ruleMode"><option value="per_player" selected>每人每轮一次 · 末位加注后封口</option><option value="practice">练习模式 · 每轮一次加注</option><option value="standard">标准模式 · 支持再加注</option></select>
 <label for="startingChips">每人起始筹码</label><input id="startingChips" type="number" min="100" max="100000" step="1" value="1000" required>
 <div class="stack-presets"><button type="button" data-stack="500">500</button><button type="button" data-stack="1000">1,000</button><button type="button" data-stack="2000">2,000</button><button type="button" data-stack="5000">5,000</button></div>
 <p>盲注 10 / 20。重新开桌将重置当前牌局。</p>

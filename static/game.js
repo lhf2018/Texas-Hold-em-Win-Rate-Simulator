@@ -225,7 +225,7 @@ function render(previous) {
   for (const button of fixedRaiseButtons) {
     button.disabled = busy || !yourTurn || !isLegalRaise(Number(button.dataset.raiseTo));
   }
-  $('raiseHint').textContent = state.raise_used && state.rule_mode !== 'standard' ? '本轮已加注' : '';
+  $('raiseHint').textContent = state.raise_used && state.rule_mode === 'practice' ? '本轮已加注' : '';
   $('deal').hidden = !state.done;
   if (yourTurn) {
     const legal = state.legal;
@@ -233,7 +233,9 @@ function render(previous) {
     $('call').textContent = legal.call ? `跟注 ${callAmount}${legal.call === state.players[0].stack ? ' · 全下' : ''}` : '过牌';
     $('call').disabled = $('fold').disabled = busy;
     $('raise').disabled = busy || !legal.can_raise;
-    $('raise').textContent = legal.raise_used ? '本轮已加注' : legal.short_allin && legal.can_raise ? `全下至 ${legal.max_raise_to}` : '加注';
+    $('raise').textContent = legal.can_raise ? (legal.short_allin ? `全下至 ${legal.max_raise_to}` : '加注') : '不可加注';
+    $('raise').title = legal.raise_reason || '';
+    $('raiseHint').textContent = legal.raise_reason || '';
     $('raiseAmount').min = Math.min(legal.min_raise_to, legal.max_raise_to);
     $('raiseAmount').max = legal.max_raise_to;
     if ($('raiseAmount').dataset.version !== String(state.version)) {
@@ -246,7 +248,7 @@ function render(previous) {
   $('deal').textContent = tableOver ? '重新开桌 →' : '发下一手 →';
   $('deal').disabled = busy;
   renderSettlement();
-  $('ruleLabel').textContent = state.rule_mode === 'standard' ? '标准再加注桌' : '单次加注练习桌';
+  $('ruleLabel').textContent = ({per_player:'每人每轮一次加注', standard:'标准再加注桌', practice:'单次加注练习桌'})[state.rule_mode];
   $('reviewPanel').hidden = !state.done || !state.review?.length;
   $('review').innerHTML = (state.done ? state.review || [] : []).map(d =>
     `<p>${escapeHTML(state.players[d.seat].name)} · ${['翻牌前','翻牌','转牌','河牌'][d.street]} · ${escapeHTML(d.action)} ${d.amount ?? ''}<br>权益 ${d.equity}% ±${d.error_95} 个百分点 · ${d.samples} 样本<br>${d.candidates.map(c => `${escapeHTML(c.action)} ${c.amount ?? ''}: EV ${c.ev} ±${c.error_95}`).join(' / ')}<br>${d.ranges.map(r => `${escapeHTML(state.players[r.seat].name)}：${escapeHTML(r.range)}（${r.actions} 次公开行动）`).join('；')}<br>${escapeHTML(d.assumption)}</p>`
@@ -344,7 +346,10 @@ function fitRaiseAmount(amount) {
 
 function updateRaisePreview() {
   const legal = state?.legal;
-  if (!legal?.can_raise) return;
+  if (!legal?.can_raise) {
+    $('raiseHint').textContent = legal?.raise_reason || '';
+    return;
+  }
   const amount = $('raiseAmount').valueAsNumber;
   const minimum = Math.min(legal.min_raise_to, legal.max_raise_to);
   const valid = isLegalRaise(amount);
@@ -388,7 +393,7 @@ $('allin').onclick = ()=>setRaise(state.legal.max_raise_to);
 $('deal').onclick = ()=> !state || state.players[0].stack === 0 || state.players.filter(p=>p.stack>0).length<2 ? openSettings() : mutate('next');
 function openSettings() {
   $('playerCount').value = state?.player_count || 4;
-  $('ruleMode').value = state?.rule_mode || 'practice';
+  $('ruleMode').value = 'per_player';
   $('startingChips').value = state?.starting_stack || 1000;
   $('restartDialog').showModal();
 }

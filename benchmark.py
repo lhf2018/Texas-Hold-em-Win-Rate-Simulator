@@ -8,7 +8,7 @@ from game import Game
 from poker import simulate_equity
 
 
-def benchmark(pairs=100, seed=42, mode='practice', samples=256):
+def benchmark(pairs=100, seed=42, mode='per_player', samples=256):
     results = []
     for pair in range(pairs):
         paired = []
@@ -46,7 +46,7 @@ if __name__ == '__main__':
     parser.add_argument('--pairs', type=int, default=100)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--samples', type=int, default=256)
-    parser.add_argument('--mode', choices=['practice','standard'], default='practice')
+    parser.add_argument('--mode', choices=['per_player','practice','standard'], default='per_player')
     args = parser.parse_args()
     if args.pairs < 1 or args.samples < 1:
         parser.error('pairs 和 samples 必须为正数')
