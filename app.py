@@ -38,7 +38,7 @@ def new_game():
     if not isinstance(data, dict):
         return jsonify(error='请求必须为JSON对象'), 400
     try:
-        game = Game(player_count=data.get('player_count', 4), starting_stack=data.get('starting_stack', 1000))
+        game = Game(player_count=data.get('player_count', 4), starting_stack=data.get('starting_stack', 1000), rule_mode=data.get('rule_mode', 'practice'))
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
     with games_lock:

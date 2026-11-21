@@ -8,44 +8,54 @@
 <body>
 <main class="container">
 <header class="header"><div><h1>德扑模拟 <span>♠</span></h1></div></header>
-<div class="toolbar"><div class="table-info"><span>单次加注练习桌</span><span id="tableSize">4 人局</span><span>盲注 10 / 20</span><span id="startingStack">起始筹码 1,000</span></div><button id="restart" class="text-btn">↻ 重新开桌</button></div>
+<div class="toolbar"><div class="table-info"><span id="ruleLabel">单次加注练习桌</span><span id="tableSize">4 人局</span><span>盲注 10 / 20</span><span id="startingStack">起始筹码 1,000</span></div><button id="restart" class="text-btn">↻ 重新开桌</button></div>
 <div class="layout">
 <section class="main-card">
-<div class="table-top"><span id="handLabel">准备入座</span><span id="stageLabel" class="pill">等待发牌</span><span id="turnLabel">筹码单位：点</span></div>
 <div class="table-scene">
 <div class="felt">
 
-<div class="board-area"><div class="pot-label">底池 <strong id="pot">0</strong></div><div id="board" class="cards-row board"></div><div id="tableMessage" class="table-message" hidden></div></div>
+<div class="board-area"><div class="pot-label">底池 <strong id="pot">0</strong></div><div id="board" class="cards-row board"></div></div>
 </div>
 <div id="tableBets" class="table-bets" aria-label="玩家本手投入筹码"></div>
 <div id="opponents" class="opponents"></div>
 <div class="player-dock">
 <div id="hero" class="hero"></div>
 <section class="action-area" aria-label="行动控制">
-<div class="action-heading"><div><h2 id="actionTitle">准备开始</h2></div><span id="callHint" class="muted"></span></div>
 <div id="actions" class="actions" hidden><button id="fold" class="btn secondary">弃牌</button><button id="call" class="btn primary">过牌</button><button id="raise" class="btn gold-outline">加注</button></div>
-<div id="raiseControls" class="raise-controls" hidden><label for="raiseAmount">本轮加注到</label><input id="raiseAmount" type="number" step="1" min="20" aria-label="本轮加注到"><button id="halfPot" class="chip-btn">½ 底池</button><button id="potRaise" class="chip-btn">底池</button><button id="allin" class="chip-btn">全下</button><span id="raiseHint" class="muted"></span></div>
+<div id="raiseControls" class="raise-controls" hidden><label for="raiseAmount">本轮加注到</label><input id="raiseAmount" type="number" step="1" min="20" aria-label="本轮加注到"><button id="halfPot" class="chip-btn">½ 底池</button><button id="potRaise" class="chip-btn">底池</button><button id="allin" class="chip-btn">全下</button><div class="raise-presets" role="group" aria-label="固定加注金额">
+  <button type="button" class="chip-btn" data-raise-to="10">10</button>
+  <button type="button" class="chip-btn" data-raise-to="20">20</button>
+  <button type="button" class="chip-btn" data-raise-to="50">50</button>
+  <button type="button" class="chip-btn" data-raise-to="100">100</button>
+  <button type="button" class="chip-btn" data-raise-to="200">200</button>
+</div><span id="raiseHint" class="muted" aria-live="polite"></span></div>
 <button id="deal" class="btn primary deal">入座并开始 →</button>
 <p id="error" class="error" role="alert" hidden></p>
 </section>
 </div>
-<div id="result" class="result" hidden></div>
 </div>
 </section>
 <aside>
 <section class="panel analysis-panel"><div class="panel-heading"><div><h2>实时胜率分析</h2></div><label class="switch" title="开启或关闭实时分析"><input id="analysisToggle" type="checkbox" role="switch" aria-label="实时胜率分析"><span></span></label></div>
 
 <div id="analysisOff" class="analysis-placeholder"><p>分析已关闭</p></div>
-<div id="analysisContent" hidden><div id="analysisStatus" class="analysis-status" aria-live="polite">等待你的回合</div><div id="analysisData" hidden><div class="equity-block"><span>预计底池权益</span><strong id="equity">--<small>%</small></strong><div class="progress"><i id="equityBar"></i></div></div><div class="metrics"><div><span>独赢概率</span><b id="winRate">--</b></div><div><span>平局概率</span><b id="tieRate">--</b></div><div><span>跟注 EV</span><b id="ev">--</b></div><div><span>跟注门槛</span><b id="potOdds">--</b></div></div><div id="handStrength" class="hand-strength"></div><p id="suggestion" class="advice"></p><div id="draws" class="draws"></div><div id="ranges" class="ranges"></div><details><summary>计算说明</summary><p id="assumption"></p><p>底池权益包含多人平分；成牌不等于获胜。2,500 次抽样存在统计波动；下注只能帮助推测，不能确定底牌。</p></details></div></div>
+<div id="analysisContent" hidden><div id="analysisStatus" class="analysis-status" aria-live="polite"></div><div id="analysisData" hidden><div id="handStrength" class="hand-strength" role="status" aria-live="polite" aria-atomic="true"></div><div class="equity-block"><span>预计底池权益</span><strong id="equity">--<small>%</small></strong><div class="progress"><i id="equityBar"></i></div></div><div class="metrics"><div><span>独赢概率</span><b id="winRate">--</b></div><div><span>平局概率</span><b id="tieRate">--</b></div><div><span>跟注 EV</span><b id="ev">--</b></div><div><span>跟注门槛</span><b id="potOdds">--</b></div></div><p id="suggestion" class="advice"></p><div id="draws" class="draws"></div><div id="ranges" class="ranges"></div><details><summary>计算说明</summary><p id="assumption"></p><p>底池权益包含多人平分；成牌不等于获胜。误差仅覆盖抽样波动，不包含范围模型误差；下注只能帮助推测，不能确定底牌。</p></details></div></div>
 </section>
-<section class="panel history-panel"><div class="panel-heading"><h2>本手记录</h2></div><ol id="history" class="history"><li class="muted">暂无记录</li></ol></section>
+<section class="panel history-panel"><div class="panel-heading"><h2>本手记录</h2></div><div id="settlement" class="settlement" aria-label="本手结算" hidden></div><details id="reviewPanel" hidden><summary>电脑决策复盘</summary><div id="review"></div></details><ol id="history" class="history"><li class="muted">暂无记录</li></ol></section>
 </aside>
 </div>
 
 </main>
+<dialog id="expiredDialog" aria-labelledby="expiredTitle" aria-describedby="expiredDescription">
+<div class="expired-symbol" aria-hidden="true">♠</div>
+<h2 id="expiredTitle">牌桌已过期</h2>
+<p id="expiredDescription">重新开一桌，继续下一场精彩对局。</p>
+<button id="expiredRestart" class="btn primary" autofocus>重新开桌 →</button>
+</dialog>
 <dialog id="restartDialog"><h2>开桌设置</h2>
 <form id="tableSettings">
 <label for="playerCount">牌桌人数</label><select id="playerCount"><option value="2">2 人局 · 单挑</option><option value="3">3 人局</option><option value="4" selected>4 人局</option><option value="5">5 人局</option><option value="6">6 人局</option><option value="7">7 人局</option><option value="8">8 人局</option><option value="9">9 人局</option><option value="10">10 人局</option></select>
+<label for="ruleMode">下注规则</label><select id="ruleMode"><option value="practice">练习模式 · 每轮一次加注</option><option value="standard">标准模式 · 支持再加注</option></select>
 <label for="startingChips">每人起始筹码</label><input id="startingChips" type="number" min="100" max="100000" step="1" value="1000" required>
 <div class="stack-presets"><button type="button" data-stack="500">500</button><button type="button" data-stack="1000">1,000</button><button type="button" data-stack="2000">2,000</button><button type="button" data-stack="5000">5,000</button></div>
 <p>盲注 10 / 20。重新开桌将重置当前牌局。</p>

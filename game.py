@@ -1,5 +1,7 @@
 """服务端德州牌局。public_view 是客户端和分析器唯一的信息边界。"""
 import random
+from itertools import combinations
+from bots import make_profile, choose_action
 from poker import get_deck, get_hand_rank, HAND_TYPE_NAMES
 
 STREETS = ['翻牌前', '翻牌', '转牌', '河牌']
@@ -18,15 +20,22 @@ def pot_layers(players):
 
 
 class Game:
-    def __init__(self, seed=None, player_count=4, starting_stack=1000):
+    def __init__(self, seed=None, player_count=4, starting_stack=1000, rule_mode="practice"):
         if type(player_count) is not int or not 2 <= player_count <= 10:
             raise ValueError('请选择2至10人局')
         if type(starting_stack) is not int or not 100 <= starting_stack <= 100000:
             raise ValueError('起始筹码须为100至100000的整数')
+        if rule_mode not in ('practice', 'standard'):
+            raise ValueError('无效规则模式')
+        self.rule_mode = rule_mode
+        self.stats = {i: dict(hands=0, vpip=0, pfr=0, faced=0, folds=0) for i in range(player_count)}
+        self.decisions = []
         self.starting_stack = starting_stack
         self.rng = random.Random(seed)
         self.players = [dict(name=n, stack=starting_stack, hole=[], folded=False, bet=0, total=0,
                              last_action='等待发牌', acted_at=None) for n in ['你', '林间客', '晚风', '松石', '星河', '听雨', '青山', '流云', '拾光', '远帆'][:player_count]]
+        # 性格只在开桌时生成，发下一手不会重置，也不向客户端泄露。
+        self.bot_profiles = {seat: make_profile(self.rng) for seat in range(1, player_count)}
         self.button = -1
         self.small_blind = None
         self.big_blind = None
@@ -52,7 +61,8 @@ class Game:
         p['last_action'] = action + (f' {amount}' if amount else '')
         self.history.append(dict(seat=seat, name=p['name'], action=action, amount=amount,
                                  street=self.street, board=list(self.board),
-                                 pot=sum(x['total'] for x in self.players), to=p['bet']))
+                                 pot=sum(x['total'] for x in self.players), to=p['bet'],
+                                 position=self.position(seat)))
 
     def pay(self, seat, amount):
         p = self.players[seat]
@@ -69,6 +79,10 @@ class Game:
         if 0 not in seats or len(seats) < 2:
             raise ValueError('本场已结束，请重新开桌')
         self.button = self.next_seat(self.button, seats)
+        self.decisions = []
+        self.voluntary, self.preflop_raised = set(), set()
+        for i in seats:
+            self.stats[i]['hands'] += 1
         self.hand += 1
         self.version += 1
         self.done = False
@@ -100,14 +114,15 @@ class Game:
         others = any(i != seat and not q['folded'] and q['stack'] > 0 for i, q in enumerate(self.players))
         minimum = 20 if self.current_bet < 20 else self.current_bet + self.min_raise
         return dict(call=call, min_raise_to=minimum, max_raise_to=maximum,
-                    can_raise=not self.raise_used and rights and others and maximum > self.current_bet,
-                    raise_used=self.raise_used,
+                    can_raise=(self.rule_mode == 'standard' or not self.raise_used) and rights and others and maximum > self.current_bet,
+                    raise_used=self.raise_used and self.rule_mode == "practice",
                     short_allin=maximum < minimum)
 
     def act(self, seat, action, amount=None):
         if self.done or seat != self.actor:
             raise ValueError('尚未轮到你行动')
         p, legal = self.players[seat], self.legal(seat)
+        facing = legal['call'] > 0
         if action == 'fold':
             p['folded'] = True
             self.record(seat, '弃牌')
@@ -138,6 +153,16 @@ class Game:
             self.record(seat, '全下加注' if p['stack'] == 0 else '加注到', amount)
         else:
             raise ValueError('无效行动')
+        if facing:
+            self.stats[seat]['faced'] += 1
+            self.stats[seat]['folds'] += action == 'fold'
+        if self.street == 0 and action in ('call', 'raise'):
+            if seat not in self.voluntary:
+                self.stats[seat]['vpip'] += 1
+                self.voluntary.add(seat)
+            if action == 'raise' and seat not in self.preflop_raised:
+                self.stats[seat]['pfr'] += 1
+                self.preflop_raised.add(seat)
         p['acted_at'] = self.current_bet
         self.pending.discard(seat)
         self.version += 1
@@ -172,21 +197,40 @@ class Game:
 
     def finish(self, uncontested=None):
         self.last_pot = sum(p['total'] for p in self.players)
+        contributions = [dict(p) for p in self.players]
+        ordered = sorted(range(len(self.players)), key=lambda i: contributions[i]['total'], reverse=True)
+        first, second = ordered[:2]
+        refund = contributions[first]['total'] - contributions[second]['total']
+        if refund:
+            contributions[first]['total'] -= refund
+            self.players[first]['stack'] += refund
+        self.result = []
         if uncontested is not None:
-            self.players[uncontested]['stack'] += self.last_pot
-            self.result = [dict(seats=[uncontested], amount=self.last_pot, label='其他玩家弃牌，赢得底池')]
+            amount = self.last_pot - refund
+            self.players[uncontested]['stack'] += amount
+            self.result.append(dict(seats=[uncontested], amount=amount, label='无人跟进', payouts={uncontested: amount}))
         else:
             ranks = {i: get_hand_rank(p['hole'] + self.board) for i, p in enumerate(self.players) if not p['folded']}
-            self.result = []
-            for index, (amount, eligible) in enumerate(pot_layers(self.players)):
+            for index, (amount, eligible) in enumerate(pot_layers(contributions)):
                 best = min(ranks[i] for i in eligible)
                 winners = [i for i in eligible if ranks[i] == best]
                 # 奇数筹码从庄家左侧开始分配。
                 winners.sort(key=lambda i: (i - self.button - 1) % len(self.players))
                 share, remainder = divmod(amount, len(winners))
-                for n, i in enumerate(winners):
-                    self.players[i]['stack'] += share + (n < remainder)
-                self.result.append(dict(seats=winners, amount=amount, label='主池' if index == 0 else f'边池 {index}'))
+                payouts = {i: share + (n < remainder) for n, i in enumerate(winners)}
+                for i, paid in payouts.items():
+                    self.players[i]['stack'] += paid
+                runner_up = min((ranks[i] for i in eligible if ranks[i] != best), default=())
+                kicker = None
+                kicker_start = {3: 2, 7: 2, 8: 3, 9: 2, 10: 1}.get(best[0])
+                if kicker_start is not None and runner_up[:kicker_start] == best[:kicker_start]:
+                    kicker = next(-a for a, b in zip(best, runner_up) if a != b)
+                self.result.append(dict(seats=winners, amount=amount, payouts=payouts, kicker=kicker,
+                                        high_card=kicker is not None and best[0] == 10,
+                                        label='主池' if index == 0 else f'边池 {index}'))
+        if refund:
+            self.result.append(dict(seats=[first], amount=refund, label='未被跟注退回',
+                                    payouts={first: refund}, kind='refund'))
         self.done = True
         self.actor = None
         self.version += 1
@@ -196,19 +240,29 @@ class Game:
             raise ValueError('当前没有电脑行动')
         seat = self.actor
         p, legal = self.players[seat], self.legal(seat)
-        # 电脑也只看自己的手牌和公共牌，独立抽样估计实力。
-        from poker import simulate_equity
-        opponents = sum(not q['folded'] for q in self.players) - 1
-        strength = simulate_equity(p['hole'], self.board + [None] * (5 - len(self.board)), opponents, 100)['equity']
-        pot = sum(q['total'] for q in self.players)
-        price = legal['call'] / max(1, pot + legal['call'])
-        if legal['call'] and strength + self.rng.uniform(-.10, .15) < price:
-            self.act(seat, 'fold')
-        elif legal['can_raise'] and (strength > .60 or self.rng.random() < .09) and self.rng.random() < .45:
-            target = min(legal['max_raise_to'], max(legal['min_raise_to'], self.current_bet + max(20, pot // 2)))
-            self.act(seat, 'raise', target)
-        else:
-            self.act(seat, 'call' if legal['call'] else 'check')
+        from bots import decide
+        action, amount, report = decide(self.decision_view(seat), seat, self.bot_profiles[seat], self.rng)
+        self.decisions.append(report)
+        self.act(seat, action, amount)
+
+    def position(self, seat):
+        able = {i for i, p in enumerate(self.players) if not p['folded'] and p['stack'] > 0} | {seat}
+        anchor = self.big_blind if self.street == 0 else self.button
+        anchor = self.button if anchor is None else anchor
+        order = sorted(able, key=lambda i: (i-anchor-1) % len(self.players))
+        return order.index(seat) / max(1,len(order)-1)
+
+    def decision_view(self, seat):
+        # 逐字段构建；不传递牌堆、真实对手手牌或可变统计引用。
+        fields = ('name', 'stack', 'folded', 'bet', 'total')
+        return dict(players=[dict(**{k:p[k] for k in fields}, seat=i,
+                                 hole=list(p['hole']) if i == seat else [])
+                             for i,p in enumerate(self.players)],
+                    board=list(self.board), history=list(self.history),
+                    stats={i:dict(v) for i,v in self.stats.items()},
+                    street=self.street, current_bet=self.current_bet,
+                    pot=sum(p['total'] for p in self.players),
+                    legal=self.legal(seat), position=self.position(seat))
 
     def public_view(self):
         showdown = self.done and len([p for p in self.players if not p['folded']]) > 1
@@ -216,11 +270,17 @@ class Game:
         for i, p in enumerate(self.players):
             visible = i == 0 or (showdown and not p['folded'])
             player = {k: p[k] for k in ('name', 'stack', 'folded', 'bet', 'total', 'last_action')}
+            best_five = []
+            if showdown and not p['folded']:
+                # Prefer the board when equivalent five-card combinations exist.
+                best_five = min(combinations(self.board + p['hole'], 5), key=get_hand_rank)
             player.update(seat=i, hole=p['hole'] if visible else [], card_count=len(p['hole']),
                           dealer=i == self.button, blind='SB' if i == self.small_blind else 'BB' if i == self.big_blind else None, allin=not p['folded'] and p['stack'] == 0,
-                          hand_type=HAND_TYPE_NAMES[get_hand_rank(p['hole'] + self.board)[0]] if showdown and not p['folded'] else None)
+                          hand_type=HAND_TYPE_NAMES[get_hand_rank(best_five)[0]] if best_five else None,
+                          best_five=[c['code'] for c in best_five])
             players.append(player)
-        return dict(player_count=len(self.players), starting_stack=self.starting_stack, players=players, board=list(self.board), street=self.street, stage=STREETS[self.street],
+        return dict(rule_mode=self.rule_mode, stats={i:dict(v) for i,v in self.stats.items()},
+                    review=list(self.decisions) if self.done else [], player_count=len(self.players), starting_stack=self.starting_stack, players=players, board=list(self.board), street=self.street, stage=STREETS[self.street],
                     hand=self.hand, version=self.version, done=self.done, actor=self.actor,
                     raise_used=self.raise_used, pot=self.last_pot if self.done else sum(p['total'] for p in self.players),
                     history=list(self.history), result=self.result,
